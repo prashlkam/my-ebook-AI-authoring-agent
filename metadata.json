@@ -1,0 +1,7 @@
+{
+  "name": "Ebook Authoring Agent",
+  "description": "A comprehensive AI-driven platform for authoring ebooks, featuring multi-agent research, identity building, chapter drafting, and publishing tools.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
