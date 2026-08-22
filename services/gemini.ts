@@ -19,15 +19,26 @@ export const scrapeAuthorIdentity = async (name: string, handles: string): Promi
   return response.text || "No information found.";
 };
 
+const parseJsonResponse = (text: string | undefined): any => {
+  if (!text) return {};
+  try {
+    const cleaned = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
+    return JSON.parse(cleaned);
+  } catch (e) {
+    console.error("Failed to parse JSON response:", text, e);
+    return {};
+  }
+};
+
 export const generateMasterPlan = async (theme: string, persona: AuthorPersona): Promise<Partial<EbookProject>> => {
   const ai = getGeminiClient();
   const prompt = `Act as a Master Ebook Architect. Create a master plan for an ebook about "${theme}". 
-  Author Voice Context: ${persona.writingStyle}. 
-  Author Background: ${persona.professionalHistory}.
+  Author Voice Context: ${persona.writingStyle || 'Professional and insightful'}. 
+  Author Background: ${persona.professionalHistory || 'Experienced domain expert'}.
   Return a JSON object containing: title, subtitle, targetAudience, and a list of 10 chapters (each with title and a 50-word overview).`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-3.1-pro-preview',
     contents: prompt,
     config: {
       responseMimeType: 'application/json',
@@ -54,7 +65,7 @@ export const generateMasterPlan = async (theme: string, persona: AuthorPersona):
     }
   });
 
-  return JSON.parse(response.text || '{}');
+  return parseJsonResponse(response.text);
 };
 
 export const draftChapter = async (
@@ -81,7 +92,7 @@ export const draftChapter = async (
   Return as JSON with 'content' (Markdown) and 'summary'.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-3.1-pro-preview',
     contents: prompt,
     config: {
       responseMimeType: 'application/json',
@@ -96,7 +107,7 @@ export const draftChapter = async (
     }
   });
 
-  const data = JSON.parse(response.text || '{}');
+  const data = parseJsonResponse(response.text);
   return {
     content: data.content || "Error generating content.",
     summary: data.summary || ""
@@ -128,7 +139,11 @@ export const checkPlagiarism = async (content: string): Promise<{ score: number;
     }
   });
 
-  return JSON.parse(response.text || '{"score": 0, "report": "Error checking"}');
+  const data = parseJsonResponse(response.text);
+  return {
+    score: typeof data.score === 'number' ? data.score : 0,
+    report: data.report || "Clean"
+  };
 };
 
 export const humanizeChapter = async (content: string): Promise<string> => {
@@ -142,7 +157,7 @@ export const humanizeChapter = async (content: string): Promise<string> => {
   Text: "${content}"`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-3.1-pro-preview',
     contents: prompt
   });
 

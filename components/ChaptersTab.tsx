@@ -27,6 +27,7 @@ interface ChaptersTabProps {
 const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona }) => {
   const [activeChapterId, setActiveChapterId] = useState(project.chapters[0]?.id || '');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [checkingPlagiarism, setCheckingPlagiarism] = useState(false);
   const [humanizing, setHumanizing] = useState(false);
   const [tweakLoading, setTweakLoading] = useState(false);
@@ -40,6 +41,7 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
   const handleDraft = async () => {
     if (!activeChapter) return;
     setLoading(true);
+    setError(null);
     try {
       const previousChapters = project.chapters.filter(c => c.number < activeChapter.number);
       const runningSummary = previousChapters.map(c => `Chapter ${c.number}: ${c.summary}`).join('\n');
@@ -50,8 +52,9 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
         c.id === activeChapterId ? { ...c, content, summary, status: 'review' as const } : c
       );
       setProject({ ...project, chapters: updatedChapters });
-    } catch (error) {
-      console.error(error);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || 'Failed to draft chapter.');
     } finally {
       setLoading(false);
     }
@@ -60,16 +63,18 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
   const handleCheckPlagiarism = async () => {
     if (!activeChapter?.content) return;
     setCheckingPlagiarism(true);
+    setError(null);
     try {
       const { score, report } = await checkPlagiarism(activeChapter.content);
-      const status = score > 40 ? 'flagged' : 'review';
+      const status: Chapter['status'] = score > 40 ? 'flagged' : 'review';
       
-      const updatedChapters = project.chapters.map(c => 
+      const updatedChapters: Chapter[] = project.chapters.map(c => 
         c.id === activeChapterId ? { ...c, plagiarismScore: score, plagiarismReport: report, status } : c
       );
       setProject({ ...project, chapters: updatedChapters });
-    } catch (error) {
-      console.error(error);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || 'Failed to check plagiarism.');
     } finally {
       setCheckingPlagiarism(false);
     }
@@ -78,14 +83,16 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
   const handleHumanize = async () => {
     if (!activeChapter?.content) return;
     setHumanizing(true);
+    setError(null);
     try {
       const humanized = await humanizeChapter(activeChapter.content);
-      const updatedChapters = project.chapters.map(c => 
-        c.id === activeChapterId ? { ...c, content: humanized, plagiarismScore: undefined, plagiarismReport: undefined, status: 'review' } : c
+      const updatedChapters: Chapter[] = project.chapters.map(c => 
+        c.id === activeChapterId ? { ...c, content: humanized, plagiarismScore: undefined, plagiarismReport: undefined, status: 'review' as const } : c
       );
       setProject({ ...project, chapters: updatedChapters });
-    } catch (error) {
-      console.error(error);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || 'Failed to humanize chapter.');
     } finally {
       setHumanizing(false);
     }
@@ -107,6 +114,7 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
   const handleTweak = async () => {
     if (!selection || !tweakPrompt || !activeChapter) return;
     setTweakLoading(true);
+    setError(null);
     try {
       const tweakedText = await tweakBlock(selection.text, tweakPrompt);
       const newContent = 
@@ -120,8 +128,9 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
       setProject({ ...project, chapters: updatedChapters });
       setSelection(null);
       setTweakPrompt('');
-    } catch (error) {
-      console.error(error);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || 'Failed to tweak text.');
     } finally {
       setTweakLoading(false);
     }
@@ -129,11 +138,13 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
 
   const handleGenerateCover = async () => {
     setGeneratingCover(true);
+    setError(null);
     try {
       const url = await generateCover(`${project.title}: ${project.theme}`);
       setProject({ ...project, coverUrl: url });
-    } catch (error) {
-      console.error(error);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || 'Failed to generate cover art.');
     } finally {
       setGeneratingCover(false);
     }
@@ -236,6 +247,16 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
                 </button>
               </div>
             </div>
+
+            {error && (
+              <div className="bg-red-950/20 border border-red-900/50 p-4 rounded-xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-center gap-3 text-xs text-red-300">
+                  <ShieldAlert className="w-5 h-5 text-red-400 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+                <button onClick={() => setError(null)} className="text-xs text-slate-400 hover:text-white">Dismiss</button>
+              </div>
+            )}
 
             {activeChapter.plagiarismReport && activeChapter.status === 'flagged' && (
               <div className="bg-red-950/20 border border-red-900/50 p-4 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">

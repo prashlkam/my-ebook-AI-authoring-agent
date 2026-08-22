@@ -55,7 +55,7 @@ const App: React.FC = () => {
       case AppTab.CHAPTERS:
         return <ChaptersTab project={project} setProject={setProject} persona={persona} />;
       case AppTab.PUBLISH:
-        return <PublishTab project={project} />;
+        return <PublishTab project={project} setProject={setProject} persona={persona} />;
       default:
         return null;
     }
