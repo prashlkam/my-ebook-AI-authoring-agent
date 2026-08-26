@@ -9,6 +9,9 @@ import {
   Image as ImageIcon, 
   Send, 
   ChevronRight, 
+  ChevronUp,
+  ChevronDown,
+  GripVertical,
   MessageSquare, 
   Sparkles, 
   Wand2, 
@@ -35,7 +38,79 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
   const [selection, setSelection] = useState<{ text: string; start: number; end: number } | null>(null);
   const [generatingCover, setGeneratingCover] = useState(false);
 
-  const activeChapter = project.chapters.find(c => c.id === activeChapterId);
+  // Drag and drop state for sidebar
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Ensure valid activeChapterId
+  useEffect(() => {
+    if (!project.chapters.some(c => c.id === activeChapterId) && project.chapters.length > 0) {
+      setActiveChapterId(project.chapters[0].id);
+    }
+  }, [project.chapters, activeChapterId]);
+
+  const reorderChapters = (chapters: Chapter[]): Chapter[] => {
+    return chapters.map((c, idx) => ({
+      ...c,
+      number: idx + 1
+    }));
+  };
+
+  const moveChapter = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= project.chapters.length) return;
+
+    const newChapters = [...project.chapters];
+    const [moved] = newChapters.splice(index, 1);
+    newChapters.splice(targetIndex, 0, moved);
+
+    setProject({
+      ...project,
+      chapters: reorderChapters(newChapters)
+    });
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `${index}`);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const newChapters = [...project.chapters];
+    const [moved] = newChapters.splice(draggedIndex, 1);
+    newChapters.splice(targetIndex, 0, moved);
+
+    setProject({
+      ...project,
+      chapters: reorderChapters(newChapters)
+    });
+
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const activeChapter = project.chapters.find(c => c.id === activeChapterId) || project.chapters[0] || null;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleDraft = async () => {
@@ -49,12 +124,13 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
       const { content, summary } = await draftChapter(activeChapter, persona, project, runningSummary);
       
       const updatedChapters = project.chapters.map(c => 
-        c.id === activeChapterId ? { ...c, content, summary, status: 'review' as const } : c
+        c.id === (activeChapter.id) ? { ...c, content, summary, status: 'review' as const } : c
       );
       setProject({ ...project, chapters: updatedChapters });
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Failed to draft chapter.');
+      const errMsg = typeof err?.message === 'string' ? err.message : String(err || 'Failed to draft chapter.');
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
@@ -69,12 +145,13 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
       const status: Chapter['status'] = score > 40 ? 'flagged' : 'review';
       
       const updatedChapters: Chapter[] = project.chapters.map(c => 
-        c.id === activeChapterId ? { ...c, plagiarismScore: score, plagiarismReport: report, status } : c
+        c.id === activeChapter.id ? { ...c, plagiarismScore: score, plagiarismReport: report, status } : c
       );
       setProject({ ...project, chapters: updatedChapters });
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Failed to check plagiarism.');
+      const errMsg = typeof err?.message === 'string' ? err.message : String(err || 'Failed to check plagiarism.');
+      setError(errMsg);
     } finally {
       setCheckingPlagiarism(false);
     }
@@ -87,12 +164,13 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
     try {
       const humanized = await humanizeChapter(activeChapter.content);
       const updatedChapters: Chapter[] = project.chapters.map(c => 
-        c.id === activeChapterId ? { ...c, content: humanized, plagiarismScore: undefined, plagiarismReport: undefined, status: 'review' as const } : c
+        c.id === activeChapter.id ? { ...c, content: humanized, plagiarismScore: undefined, plagiarismReport: undefined, status: 'review' as const } : c
       );
       setProject({ ...project, chapters: updatedChapters });
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Failed to humanize chapter.');
+      const errMsg = typeof err?.message === 'string' ? err.message : String(err || 'Failed to humanize chapter.');
+      setError(errMsg);
     } finally {
       setHumanizing(false);
     }
@@ -123,14 +201,15 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
         activeChapter.content.substring(selection.end);
       
       const updatedChapters = project.chapters.map(c => 
-        c.id === activeChapterId ? { ...c, content: newContent } : c
+        c.id === activeChapter.id ? { ...c, content: newContent } : c
       );
       setProject({ ...project, chapters: updatedChapters });
       setSelection(null);
       setTweakPrompt('');
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Failed to tweak text.');
+      const errMsg = typeof err?.message === 'string' ? err.message : String(err || 'Failed to tweak text.');
+      setError(errMsg);
     } finally {
       setTweakLoading(false);
     }
@@ -144,7 +223,8 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
       setProject({ ...project, coverUrl: url });
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Failed to generate cover art.');
+      const errMsg = typeof err?.message === 'string' ? err.message : String(err || 'Failed to generate cover art.');
+      setError(errMsg);
     } finally {
       setGeneratingCover(false);
     }
@@ -175,31 +255,77 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {project.chapters.map((chapter) => (
-            <button
-              key={chapter.id}
-              onClick={() => setActiveChapterId(chapter.id)}
-              className={`w-full text-left p-3 rounded-xl transition-all ${
-                activeChapterId === chapter.id 
-                  ? 'bg-indigo-500/10 text-indigo-400 font-semibold border border-indigo-500/30' 
-                  : 'text-slate-400 hover:bg-slate-800 border border-transparent'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <span className="text-[10px] uppercase font-bold text-slate-600">CH {chapter.number}</span>
-                  <span className="truncate text-sm">{chapter.title}</span>
+          {(project.chapters || []).map((chapter, idx) => {
+            if (!chapter) return null;
+            const isDragged = draggedIndex === idx;
+            const isDragTarget = dragOverIndex === idx && draggedIndex !== idx;
+            const isSelected = activeChapter?.id === chapter.id;
+
+            return (
+              <div
+                key={chapter.id || `ch_${idx}`}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDrop={(e) => handleDrop(e, idx)}
+                className={`group relative flex items-center justify-between p-2 rounded-xl transition-all ${
+                  isDragged 
+                    ? 'opacity-40 border-dashed border-indigo-500 bg-slate-800/40' 
+                    : isDragTarget 
+                    ? 'border-indigo-500 ring-2 ring-indigo-500/40 bg-indigo-500/10' 
+                    : isSelected 
+                    ? 'bg-indigo-500/10 text-indigo-400 font-semibold border border-indigo-500/30' 
+                    : 'text-slate-400 hover:bg-slate-800 border border-transparent'
+                }`}
+              >
+                <div 
+                  onClick={() => setActiveChapterId(chapter.id)} 
+                  className="flex items-center gap-2 overflow-hidden flex-1 cursor-pointer select-none py-1"
+                >
+                  <div 
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, idx)}
+                    onDragEnd={handleDragEnd}
+                    className="cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-300 opacity-60 group-hover:opacity-100 p-0.5 flex-shrink-0"
+                    title="Drag to reorder"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <GripVertical className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-[10px] uppercase font-bold text-slate-500 flex-shrink-0">CH {chapter.number || idx + 1}</span>
+                  <span className="truncate text-xs">{chapter.title || `Chapter ${idx + 1}`}</span>
                 </div>
-                {chapter.status === 'flagged' && <ShieldAlert className="w-3 h-3 text-red-500 flex-shrink-0" />}
+
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {chapter.status === 'flagged' && <ShieldAlert className="w-3 h-3 text-red-500 flex-shrink-0 mr-1" />}
+                  <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); moveChapter(idx, 'up'); }}
+                      disabled={idx === 0}
+                      className="p-0.5 text-slate-500 hover:text-indigo-400 rounded disabled:opacity-20 transition-colors"
+                      title="Move up"
+                    >
+                      <ChevronUp className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); moveChapter(idx, 'down'); }}
+                      disabled={idx === (project.chapters?.length || 1) - 1}
+                      className="p-0.5 text-slate-500 hover:text-indigo-400 rounded disabled:opacity-20 transition-colors"
+                      title="Move down"
+                    >
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
               </div>
-            </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       {/* Editor Main Area */}
       <div className="col-span-9 flex flex-col gap-6">
-        {activeChapter && (
+        {activeChapter ? (
           <>
             <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 flex items-center justify-between shadow-xl">
               <div className="space-y-1">
@@ -361,6 +487,11 @@ const ChaptersTab: React.FC<ChaptersTabProps> = ({ project, setProject, persona 
               </div>
             </div>
           </>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-slate-500 bg-slate-900 rounded-2xl border border-slate-800 p-12">
+            <MessageSquare className="w-12 h-12 mb-3 text-slate-700" />
+            <p className="text-sm font-semibold">Select a chapter from the sidebar to start drafting</p>
+          </div>
         )}
       </div>
     </div>

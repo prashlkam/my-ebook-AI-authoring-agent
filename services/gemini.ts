@@ -22,12 +22,30 @@ export const scrapeAuthorIdentity = async (name: string, handles: string): Promi
 const parseJsonResponse = (text: string | undefined): any => {
   if (!text) return {};
   try {
-    const cleaned = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
-    return JSON.parse(cleaned);
+    const trimmed = text.trim();
+    // 1. Try direct parse
+    try {
+      return JSON.parse(trimmed);
+    } catch (_) {}
+
+    // 2. Try stripping markdown code fences
+    const stripped = trimmed
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```\s*$/i, '')
+      .trim();
+    try {
+      return JSON.parse(stripped);
+    } catch (_) {}
+
+    // 3. Extract JSON object {...} or array [...]
+    const jsonMatch = trimmed.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
   } catch (e) {
     console.error("Failed to parse JSON response:", text, e);
-    return {};
   }
+  return {};
 };
 
 export const generateMasterPlan = async (theme: string, persona: AuthorPersona): Promise<Partial<EbookProject>> => {
